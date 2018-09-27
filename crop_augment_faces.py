@@ -41,6 +41,7 @@ from layers import *
 import cv2
 import numpy as np
 import math
+from random import randint
 
 os.environ["CUDA_VISIBLE_DEVICES"]='0'
 torch.cuda.set_device(0)
@@ -56,25 +57,28 @@ print('Finished loading model!')
 parser = argparse.ArgumentParser()
 parser.add_argument('--data_dir', default='ai_challenger_keypoint_test_a_20180103')
 parser.add_argument('--out_dir', default='annotations')
+parser.add_argument('--images_out_dir', default='images_out')
 parser.add_argument('--image_dir', default='keypoint_test_a_images_20180103')
 parser.add_argument('--json_file', default='keypoint_test_a_annotations_20180103.json')
 parser.add_argument('--confidence', type=float, default=0.1)
 args = parser.parse_args()
 
-#image_dir = os.path.join(args.data_dir, 'keypoint_test_a_images_20180103/')
+# set variable paths to images and json file
 image_dir = os.path.join(args.data_dir, args.image_dir)
 images = os.listdir(image_dir)
 print('images', len(images))
 
-#json_file = os.path.join(args.data_dir, 'keypoint_test_a_annotations_20180103.json')
 json_file = os.path.join(args.data_dir, args.json_file)
 annos = json.load(open(json_file, 'r'))
 print('annos', len(annos))
 
-#target_image_dir = os.path.join(args.out_dir, 'face_images/')
-#target_annotation_dir = os.path.join(args.out_dir, args.data_dir, args.image_dir)
 target_annotation_dir = os.path.join(args.out_dir)
 mkpath(target_annotation_dir)
+target_images_dir = os.path.join(args.images_out_dir, 'faces')
+mkpath(target_images_dir)
+target_negative_images_dir = os.path.join(args.images_out_dir, 'background')
+mkpath(target_negative_images_dir)
+
 
 start = time.time()
 file_mapping = []
@@ -247,57 +251,114 @@ def write_to_txt(f, det, image_path):
         f.write('{:.1f} {:.1f} {:.1f} {:.1f} {:.3f}\n'.
                 format(xmin, ymin, (xmax - xmin + 1), (ymax - ymin + 1), score))
 
+
+def generate_neg_samples(image, det_list):
+    height, width, channels = image.shape
+    neg_samples_list = []
+
+    for i in range( len(det_list) ):
+        for det in det_list:
+            try:
+               x = randint(1, width - 150)
+               y = randint(1, height - 150)
+               box_size = randint(100, 220)
+               if  (det[0] > x and det[0]< x+box_size) or (det[1] > y and det[1] < y+box_size) or (det[2] > x and det[2]< x+box_size) or (det[3] > y and det[3] < y+box_size) or ((det[2]-det[0])/2 > x and (det[2]-det[0])/2 < x+box_size) or ((det[3]-det[1])/2 > y and (det[3]-det[1])/2 < y+box_size):
+                   continue
+               else:
+                   neg_samples_list.append([x, y, min(x+box_size, width-1), min(y+box_size, height-1)])
+                   break
+            
+            except: 
+                continue
+
+    return neg_samples_list
+
+
+
 for idx, anno in enumerate(annos):
     # Print status.
     if (idx + 1) % 1000 == 0 or (idx + 1) == len(annos):
         print(str(idx + 1) + ' / ' + str(len(annos)) + "test")
 
-    #try:
-    # Read image.
-    #img = io.imread(image_dir + "/" + anno['image_id'] + '.jpg')
+    # read images
     image_path = image_dir + "/" + anno['image_id'] + '.jpg';
     image = cv2.imread(image_dir + "/" + anno['image_id'] + '.jpg', cv2.IMREAD_COLOR)
     print (image_path)
-    #print("image_path")
 
     max_im_shrink = (0x7fffffff / 200.0 / (image.shape[0] * image.shape[1])) ** 0.4 # the max size of input image for caffe
     max_im_shrink = 3 if max_im_shrink > 3 else max_im_shrink
-        
     shrink = max_im_shrink if max_im_shrink < 1 else 1
         
-    #print("before det")
+    # start detection
     det0 = detect_face(image, shrink)  # origin test
     det1 = flip_test(image, shrink)    # flip test
     [det2, det3] = multi_scale_test(image, max_im_shrink) #min(2,1400/min(image.shape[0],image.shape[1])))  #multi-scale test
     det4 = multi_scale_test_pyramid(image, max_im_shrink)
     det = np.row_stack((det0, det1, det2, det3, det4))
-    #print("after det")
     dets = bbox_vote(det)
 
+    # read keypoints from json
+    Keypoints_list = []
+    keypoints_all = anno['keypoint_annotations']
+    print(keypoints_all)
+    for key, value in keypoints_all.iteritems():
+        #print(value)
+        Keypoints_list.append(value[36:])  # last 6 elements contain head and neck info
+        #print(Keypoints_list )
+        #print(Keypoints_list[0][1])
+    
     count = 0
+    height, width, channels = image.shape
+    det_list = []
     for i in range(dets.shape[0]):
         xmin = int(dets[i][0])
         ymin = int(dets[i][1])
         xmax = int(dets[i][2])
         ymax = int(dets[i][3])
         score = dets[i][4]
-        if score > args.confidence:
-            #face_crop = image[ymin:ymax, xmin:xmax]
-            #face_name = target_annotation_dir + "/" + anno['image_id'] + '__' + str(count) +'.jpg'
-            #face_out = cv2.imwrite(face_name, face_crop)
-            count+=1
-            cv2.rectangle(image, (int(xmin),int(ymin)), (int(xmax),int(ymax)), (0, 255, 0), 2)
+        #det_list.append([xmin, ymin, xmax, ymax])
 
-    cv2.imshow("img", image)
-    cv2.waitKey(0)
+        #if score > args.confidence:
+        padding = 25
+        xmin_c = max(0, xmin- padding)
+        ymin_c = max(0, ymin- padding)
+        xmax_c = min(width, xmax+ padding)
+        ymax_c = min(height, ymax+ padding)
+        det_list.append([xmin_c, ymin_c, xmax_c, ymax_c])
+        print("face_bound: ", xmin_c, ymin_c, xmax_c, ymax_c, score)
+        
+        for idx, human in enumerate(Keypoints_list):
+            print("human: ", human)
+            if human[0] >= xmin_c and human[0] <= xmax_c and human[3] >= xmin_c and human[3] <= xmax_c and human[1] >= (ymin_c-20) and human[1] <= (ymax_c+20) and human[4] >= (ymin_c-20) and human[4] <= (ymax_c+20):
 
-    image_annotation_path = target_annotation_dir + "/" + anno['image_id'] + '.txt';
-    print(image_annotation_path)
-    f = open(image_annotation_path, 'w')
-    write_to_txt(f, dets, image_path)
+                face_crop = image[ymin_c:ymax_c, xmin_c:xmax_c]
+                face_resized = cv2.resize(face_crop, (224, 224))
+                #cv2.imshow("img_crop", face_resized)
+                #cv2.waitKey(0)
+                face_name = target_images_dir + "/" + anno['image_id'] + '_' + str(count) +'.jpg'
+                face_out = cv2.imwrite(face_name, face_resized)
+                count+=1
+                #cv2.rectangle(image, (int(xmin_c),int(ymin_c)), (int(xmax_c),int(ymax_c)), (0, 255, 0), 1)
+                #cv2.circle(image,(human[0],human[1]), 3, (0,0,255), -1)
+                #cv2.circle(image,(human[3],human[4]), 3, (0,0,255), -1)
+                del Keypoints_list[idx]
 
-    #except:
-    #    print("except")
-    #    continue
+    #cv2.imshow("img", image)
+    #cv2.waitKey(0)
+    
+    count_neg = 0
+    neg_boxes = generate_neg_samples(image, det_list)
+    for item in neg_boxes:
+        crop = image[item[1]:item[3], item[0]:item[2]]
+        resized = cv2.resize(crop, (224, 224))
+        name = target_negative_images_dir + "/" + anno['image_id'] + '_' + str(count_neg) +'.jpg'
+        out = cv2.imwrite(name, resized)
+        count_neg += 1
+
+
+    #image_annotation_path = target_annotation_dir + "/" + anno['image_id'] + '.txt';
+    #print(image_annotation_path)
+    #f = open(image_annotation_path, 'w')
+    #write_to_txt(f, dets, image_path)
 
 print('Successfully processed all the images in %.2f seconds.' % (time.time() - start))

@@ -1,0 +1,9 @@
+
+*.pyc
+*.pth
+
+# Editor temporaries
+*.swp
+*~
+
+

@@ -56,8 +56,9 @@ print('Finished loading model!')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data_dir', default='ai_challenger_keypoint_test_a_20180103')
-parser.add_argument('--out_dir', default='annotations')
-parser.add_argument('--images_out_dir', default='images_out')
+#parser.add_argument('--out_dir', default='annotations')
+parser.add_argument('--faces_out_dir', default='images_out')
+parser.add_argument('--background_out_dir', default='images_out')
 parser.add_argument('--image_dir', default='keypoint_test_a_images_20180103')
 parser.add_argument('--json_file', default='keypoint_test_a_annotations_20180103.json')
 parser.add_argument('--confidence', type=float, default=0.1)
@@ -72,11 +73,11 @@ json_file = os.path.join(args.data_dir, args.json_file)
 annos = json.load(open(json_file, 'r'))
 print('annos', len(annos))
 
-target_annotation_dir = os.path.join(args.out_dir)
-mkpath(target_annotation_dir)
-target_images_dir = os.path.join(args.images_out_dir, 'faces')
+#target_annotation_dir = os.path.join(args.out_dir)
+#mkpath(target_annotation_dir)
+target_images_dir = args.faces_out_dir
 mkpath(target_images_dir)
-target_negative_images_dir = os.path.join(args.images_out_dir, 'background')
+target_negative_images_dir = args.background_out_dir
 mkpath(target_negative_images_dir)
 
 
@@ -300,7 +301,7 @@ for idx, anno in enumerate(annos):
     # read keypoints from json
     Keypoints_list = []
     keypoints_all = anno['keypoint_annotations']
-    print(keypoints_all)
+    #print(keypoints_all)
     for key, value in keypoints_all.iteritems():
         #print(value)
         Keypoints_list.append(value[36:])  # last 6 elements contain head and neck info
@@ -328,7 +329,7 @@ for idx, anno in enumerate(annos):
         print("face_bound: ", xmin_c, ymin_c, xmax_c, ymax_c, score)
         
         for idx, human in enumerate(Keypoints_list):
-            print("human: ", human)
+            #print("human: ", human)
             if human[0] >= xmin_c and human[0] <= xmax_c and human[3] >= xmin_c and human[3] <= xmax_c and human[1] >= (ymin_c-20) and human[1] <= (ymax_c+20) and human[4] >= (ymin_c-20) and human[4] <= (ymax_c+20):
 
                 face_crop = image[ymin_c:ymax_c, xmin_c:xmax_c]

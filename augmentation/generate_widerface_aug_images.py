@@ -28,15 +28,17 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--images_dir', default="/media/sdf/AI-Challenger/ai_challenger_keypoint_test_a_20180103/out/images/faces")
-    parser.add_argument('--num_samples', default=10)
+    parser.add_argument('--num_samples', default=5)
+    parser.add_argument('--out_dir', default=None)
+
 
     args = parser.parse_args()
 
     #filename = "/media/sdf/AI-Challenger/ai_challenger_keypoint_test_a_20180103/out/images/faces/f5d05af3f88828abcafdcb80d428d48d5512c315_0.jpg"
     #generate_samples = 10
     input_folder = args.images_dir
-    out_dir = "/media/sdf/AI-Challenger/ai_challenger_keypoint_test_a_20180103/out/images/aug"
-    #out_dir = args.images_dir # output images in the same input folder
+    #out_dir = "/media/sdf/AI-Challenger/ai_challenger_keypoint_test_a_20180103/out/images/aug"
+    out_dir = args.out_dir # output images in the same input folder
     for files in scandir(input_folder):
         if files.is_file() and files.name.endswith('.jpg'):
             image_name = os.path.join(input_folder, files.name)
